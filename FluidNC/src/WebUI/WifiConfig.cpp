@@ -18,6 +18,7 @@
 #include "NotificationsService.h"  // notificationsservice
 
 #include <WiFi.h>
+#include <esp_wpa2.h>
 #include <esp_wifi.h>
 #include "Driver/localfs.h"
 #include <string>
@@ -706,48 +707,25 @@ namespace WebUI {
             return false;
         }
 
-        static bool StartSTA() {
-            //Sanity check
-            auto mode = WiFi.getMode();
-            if (mode == WIFI_STA || mode == WIFI_AP_STA) {
-                WiFi.disconnect();
-            }
-
-            if (mode == WIFI_AP || mode == WIFI_AP_STA) {
-                WiFi.softAPdisconnect();
-            }
-
-            WiFi.enableAP(false);
-
-            //SSID
-            const char* SSID = _sta_ssid->get();
-            if (strlen(SSID) == 0) {
-                log_info("STA SSID is not set");
-                return false;
-            }
-            //Hostname needs to be set before mode to take effect
-            WiFi.setHostname(_hostname->get());
+        bool StartSTA() {
+            WiFi.disconnect(true);
             WiFi.mode(WIFI_STA);
-            WiFi.setMinSecurity(static_cast<wifi_auth_mode_t>(_sta_min_security->get()));
-            WiFi.setScanMethod(_fast_scan->get() ? WIFI_FAST_SCAN : WIFI_ALL_CHANNEL_SCAN);
-            WiFi.setAutoReconnect(true);
-            //Get parameters for STA
-            //password
-            const char* password = _sta_password->get();
-            int8_t      IP_mode  = _sta_mode->get();
-            int32_t     IP       = _sta_ip->get();
-            int32_t     GW       = _sta_gateway->get();
-            int32_t     MK       = _sta_netmask->get();
-            //if not DHCP
-            if (IP_mode != DHCP_MODE) {
-                IPAddress ip(IP), mask(MK), gateway(GW);
-                WiFi.config(ip, gateway, mask);
+        
+            WiFi.begin("eduroam", WPA2_AUTH_PEAP, "cvwo@eva.eduroam.ca", "cvwo@eva.eduroam.ca", "pyknm");
+        
+            Serial.print("Connecting to eduroam");
+        
+            unsigned long startTime = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - startTime < 20000) { // 20 seconds timeout
+                delay(500);
+                Serial.print(".");
             }
-            if (WiFi.begin(SSID, (strlen(password) > 0) ? password : NULL)) {
-                log_info("Connecting to STA SSID:" << SSID);
-                return ConnectSTA2AP();
+        
+            if (WiFi.status() == WL_CONNECTED) {
+                log_info("Connected to eduroam");
+                return true;
             } else {
-                log_info("Starting client failed");
+                Serial.println("\nFailed to connect to eduroam");
                 return false;
             }
         }
